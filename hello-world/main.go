@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 var (
@@ -76,6 +77,20 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	for _, b := range result.Buckets {
 		fmt.Printf("* %s created on %s\n",
 			aws.StringValue(b.Name), aws.TimeValue(b.CreationDate))
+	}
+
+	file, err := os.Open("./octo-cat.png")
+	if err != nil {
+		exitErrorf("Unable to open file, %v", err)
+	}
+	uploader := s3manager.NewUploader(sess)
+	_, err = uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String("hello-go-serverless"),
+		Key:    aws.String("uploaded-octo-cat.png"),
+		Body:   file,
+	})
+	if err != nil {
+		exitErrorf("Upload failed, %v", err)
 	}
 
 	return events.APIGatewayProxyResponse{
