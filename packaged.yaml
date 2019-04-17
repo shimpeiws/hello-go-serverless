@@ -9,10 +9,39 @@ Globals:
   Function:
     Timeout: 5
 Resources:
+  S3Triggered:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://hello-go-serverless/625cd614b9acc0cdd8b58ddf8aca3ec2
+      Handler: s3-triggered
+      Runtime: go1.x
+      Description: An Amazon S3 trigger that retrieves metadata for the object that
+        has been updated.
+      MemorySize: 128
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          - s3:PutObject
+          Resource: arn:aws:s3:::hello-go-serverless-*
+      Events:
+        S3Event:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: TestBucket
+            Events:
+            - s3:ObjectCreated:Put
+      Environment:
+        Variables:
+          TARGET_S3: hello-go-serverless-development
+          REGION: ap-northeast-1
   HelloWorldFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://hello-go-serverless/045e206f2db4c2631496541d99158ba1
+      CodeUri: s3://hello-go-serverless/2f0d88970c6e74c250fd68ff612cb47f
       Handler: hello-world
       Runtime: go1.x
       Tracing: Active
@@ -25,6 +54,14 @@ Resources:
       Environment:
         Variables:
           PARAM1: VALUE
+  TestBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: hello-go-serverless-development-original
+  TestBucketConvert:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: hello-go-serverless-development
 Outputs:
   HelloWorldAPI:
     Description: API Gateway endpoint URL for Prod environment for First Function
