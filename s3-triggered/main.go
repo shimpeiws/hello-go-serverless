@@ -144,7 +144,7 @@ func handler(ctx context.Context, req events.S3Event) error {
 		return errors.Wrap(err, "Error failed to encode image")
 	}
 
-	_, err = upload(file, key)
+	_, err = upload(tempFile, key)
 	if err != nil {
 		return errors.Wrap(err, "Error failed to s3 upload")
 	}
