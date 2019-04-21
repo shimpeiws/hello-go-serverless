@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io/ioutil"
 	"log"
 	"os"
@@ -94,6 +97,51 @@ func handler(ctx context.Context, req events.S3Event) error {
 				log.Printf("Y: %d", verticy.Y)
 			}
 		}
+	}
+
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return errors.Wrap(err, "decode error")
+	}
+	log.Print("decoded")
+	bounds := img.Bounds()
+	log.Print("bounds")
+	dest := image.NewRGBA(bounds)
+	log.Print("dest")
+	block := 11
+	for y := bounds.Min.Y + (block-1)/2; y < bounds.Max.Y; y = y + block {
+		for x := bounds.Min.X + (block-1)/2; x < bounds.Max.X; x = x + block {
+			var cr, cg, cb float32
+			var alpha uint8
+			for j := y - (block-1)/2; j <= y+(block-1)/2; j++ {
+				for i := x - (block-1)/2; i <= x+(block-1)/2; i++ {
+					if i >= 0 && j >= 0 && i < bounds.Max.X && j < bounds.Max.Y {
+						c := color.RGBAModel.Convert(img.At(i, j))
+						col := c.(color.RGBA)
+						cr += float32(col.R)
+						cg += float32(col.G)
+						cb += float32(col.B)
+						alpha = col.A
+					}
+				}
+			}
+			cr = cr / float32(block*block)
+			cg = cg / float32(block*block)
+			cb = cb / float32(block*block)
+			for j := y - (block-1)/2; j <= y+(block-1)/2; j++ {
+				for i := x - (block-1)/2; i <= x+(block-1)/2; i++ {
+					if i >= 0 && j >= 0 && i < bounds.Max.X && j < bounds.Max.Y {
+						dest.Set(i, j, color.RGBA{uint8(cr), uint8(cg), uint8(cb), alpha})
+					}
+				}
+			}
+		}
+	}
+	tempFile, _ := ioutil.TempFile("/tmp", "tempOutfile")
+	defer os.Remove(tempFile.Name())
+	err = jpeg.Encode(tempFile, dest, nil)
+	if err != nil {
+		return errors.Wrap(err, "Error failed to encode image")
 	}
 
 	_, err = upload(file, key)
