@@ -12,7 +12,7 @@ Resources:
   S3Triggered:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://hello-go-serverless/625cd614b9acc0cdd8b58ddf8aca3ec2
+      CodeUri: s3://hello-go-serverless/4868af691d6e014d1e9b55360926dbce
       Handler: s3-triggered
       Runtime: go1.x
       Description: An Amazon S3 trigger that retrieves metadata for the object that
@@ -38,10 +38,11 @@ Resources:
         Variables:
           TARGET_S3: hello-go-serverless-development
           REGION: ap-northeast-1
+          GOOGLE_APPLICATION_CREDENTIALS: ./service-account-key.json
   HelloWorldFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://hello-go-serverless/2f0d88970c6e74c250fd68ff612cb47f
+      CodeUri: s3://hello-go-serverless/091f0e9cfd16e034570a258deb06ac50
       Handler: hello-world
       Runtime: go1.x
       Tracing: Active

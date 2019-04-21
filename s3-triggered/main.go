@@ -13,6 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/pkg/errors"
+
+	"github.com/shimpeiws/hello-go-serverless/cloudvision"
 )
 
 func createSession() *session.Session {
@@ -75,6 +77,24 @@ func handler(ctx context.Context, req events.S3Event) error {
 		return errors.Wrap(err, "Error failed to s3 download")
 	}
 	log.Print("downloaded")
+
+	faceAnnotations, err := cloudvision.DetectFaces(ctx, file)
+	if err != nil {
+		return errors.Wrap(err, "Failed to detect faces")
+	}
+	if len(faceAnnotations) == 0 {
+		log.Print("No face found")
+	} else {
+		log.Print("Faces: ")
+		for i, annotation := range faceAnnotations {
+			boundingPoly := annotation.BoundingPoly
+			log.Printf("Face %d", i)
+			for _, verticy := range boundingPoly.Vertices {
+				log.Printf("X: %d", verticy.X)
+				log.Printf("Y: %d", verticy.Y)
+			}
+		}
+	}
 
 	_, err = upload(file, key)
 	if err != nil {
