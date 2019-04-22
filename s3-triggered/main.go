@@ -16,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/pkg/errors"
-
 	"github.com/shimpeiws/hello-go-serverless/cloudvision"
 )
 
@@ -48,7 +47,7 @@ func upload(file *os.File, key string) (*s3manager.UploadOutput, error) {
 func download(bucket string, key string) (f *os.File, err error) {
 	sess := createSession()
 
-	tempFile, _ := ioutil.TempFile("/tmp", "tempfile")
+	tempFile, _ := ioutil.TempFile("/tmp", "tempfile.jpeg")
 	defer os.Remove(tempFile.Name())
 
 	downloader := s3manager.NewDownloader(sess)
@@ -99,7 +98,13 @@ func handler(ctx context.Context, req events.S3Event) error {
 		}
 	}
 
-	img, _, err := image.Decode(file)
+	fileProcess, err := download(bucketName, key)
+	if err != nil {
+		return errors.Wrap(err, "Error failed to s3 download")
+	}
+	log.Print("downloaded")
+
+	img, err := jpeg.Decode(fileProcess)
 	if err != nil {
 		return errors.Wrap(err, "decode error")
 	}
@@ -137,7 +142,7 @@ func handler(ctx context.Context, req events.S3Event) error {
 			}
 		}
 	}
-	tempFile, _ := ioutil.TempFile("/tmp", "tempOutfile")
+	tempFile, _ := ioutil.TempFile("/tmp", "tempOutfile.jpeg")
 	defer os.Remove(tempFile.Name())
 	err = jpeg.Encode(tempFile, dest, nil)
 	if err != nil {
