@@ -65,6 +65,26 @@ func download(bucket string, key string) (f *os.File, err error) {
 	return tempFile, err
 }
 
+func minInClice(a []int32) int32 {
+	min := a[0]
+	for _, i := range a {
+		if i < min {
+			min = i
+		}
+	}
+	return min
+}
+
+func maxInClice(a []int32) int32 {
+	max := a[0]
+	for _, i := range a {
+		if i > max {
+			max = i
+		}
+	}
+	return max
+}
+
 func handler(ctx context.Context, req events.S3Event) error {
 	log.Print("Handler Executed!!!")
 
@@ -80,6 +100,8 @@ func handler(ctx context.Context, req events.S3Event) error {
 	}
 	log.Print("downloaded")
 
+	vercityX := []int32{}
+	vercityY := []int32{}
 	faceAnnotations, err := cloudvision.DetectFaces(ctx, file)
 	if err != nil {
 		return errors.Wrap(err, "Failed to detect faces")
@@ -92,11 +114,16 @@ func handler(ctx context.Context, req events.S3Event) error {
 			boundingPoly := annotation.BoundingPoly
 			log.Printf("Face %d", i)
 			for _, verticy := range boundingPoly.Vertices {
-				log.Printf("X: %d", verticy.X)
-				log.Printf("Y: %d", verticy.Y)
+				vercityX = append(vercityX, verticy.X)
+				vercityY = append(vercityY, verticy.Y)
 			}
 		}
 	}
+
+	minX := minInClice(vercityX)
+	minY := minInClice(vercityY)
+	maxX := maxInClice(vercityX)
+	maxY := maxInClice(vercityY)
 
 	fileProcess, err := download(bucketName, key)
 	if err != nil {
@@ -108,20 +135,24 @@ func handler(ctx context.Context, req events.S3Event) error {
 	if err != nil {
 		return errors.Wrap(err, "decode error")
 	}
-	log.Print("decoded")
 	bounds := img.Bounds()
-	log.Print("bounds")
 	dest := image.NewRGBA(bounds)
-	log.Print("dest")
-	block := 11
-	for y := bounds.Min.Y + (block-1)/2; y < bounds.Max.Y; y = y + block {
-		for x := bounds.Min.X + (block-1)/2; x < bounds.Max.X; x = x + block {
+	for y := bounds.Min.Y; y < bounds.Max.Y; y = y + 1 {
+		for x := bounds.Min.X; x < bounds.Max.X; x = x + 1 {
+			dest.Set(x, y, img.At(x, y))
+		}
+	}
+
+	var block int32
+	block = 25
+	for y := minY + (block-1)/2; y < maxY; y = y + block {
+		for x := minX + (block-1)/2; x < maxX; x = x + block {
 			var cr, cg, cb float32
 			var alpha uint8
 			for j := y - (block-1)/2; j <= y+(block-1)/2; j++ {
 				for i := x - (block-1)/2; i <= x+(block-1)/2; i++ {
-					if i >= 0 && j >= 0 && i < bounds.Max.X && j < bounds.Max.Y {
-						c := color.RGBAModel.Convert(img.At(i, j))
+					if i >= 0 && j >= 0 && i < maxX && j < maxY {
+						c := color.RGBAModel.Convert(img.At(int(i), int(j)))
 						col := c.(color.RGBA)
 						cr += float32(col.R)
 						cg += float32(col.G)
@@ -135,8 +166,8 @@ func handler(ctx context.Context, req events.S3Event) error {
 			cb = cb / float32(block*block)
 			for j := y - (block-1)/2; j <= y+(block-1)/2; j++ {
 				for i := x - (block-1)/2; i <= x+(block-1)/2; i++ {
-					if i >= 0 && j >= 0 && i < bounds.Max.X && j < bounds.Max.Y {
-						dest.Set(i, j, color.RGBA{uint8(cr), uint8(cg), uint8(cb), alpha})
+					if i >= 0 && j >= 0 && i < maxX && j < maxY {
+						dest.Set(int(i), int(j), color.RGBA{uint8(cr), uint8(cg), uint8(cb), alpha})
 					}
 				}
 			}
