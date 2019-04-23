@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"image"
 	"image/color"
@@ -26,7 +27,8 @@ func createSession() *session.Session {
 	}))
 }
 
-func upload(file *os.File, key string) (*s3manager.UploadOutput, error) {
+func upload(file *bytes.Reader, key string) (*s3manager.UploadOutput, error) {
+
 	sess := createSession()
 
 	uploader := s3manager.NewUploader(sess)
@@ -110,12 +112,17 @@ func handler(ctx context.Context, req events.S3Event) error {
 		log.Print("No face found")
 	} else {
 		log.Print("Faces: ")
+		log.Print(len(faceAnnotations))
 		for i, annotation := range faceAnnotations {
 			boundingPoly := annotation.BoundingPoly
 			log.Printf("Face %d", i)
 			for _, verticy := range boundingPoly.Vertices {
 				vercityX = append(vercityX, verticy.X)
 				vercityY = append(vercityY, verticy.Y)
+				log.Print("X: ")
+				log.Print(verticy.X)
+				log.Print("Y: ")
+				log.Print(verticy.Y)
 			}
 		}
 	}
@@ -129,7 +136,7 @@ func handler(ctx context.Context, req events.S3Event) error {
 	if err != nil {
 		return errors.Wrap(err, "Error failed to s3 download")
 	}
-	log.Print("downloaded")
+	log.Print("fileProcess downloaded")
 
 	img, err := jpeg.Decode(fileProcess)
 	if err != nil {
@@ -173,14 +180,16 @@ func handler(ctx context.Context, req events.S3Event) error {
 			}
 		}
 	}
-	tempFile, _ := ioutil.TempFile("/tmp", "tempOutfile.jpeg")
-	defer os.Remove(tempFile.Name())
-	err = jpeg.Encode(tempFile, dest, nil)
-	if err != nil {
-		return errors.Wrap(err, "Error failed to encode image")
-	}
+	log.Print("mosaic")
 
-	_, err = upload(tempFile, key)
+	buff := new(bytes.Buffer)
+	err = jpeg.Encode(buff, dest, nil)
+	if err != nil {
+		return errors.Wrap(err, "Failed to create buffer")
+	}
+	reader := bytes.NewReader(buff.Bytes())
+
+	_, err = upload(reader, key)
 	if err != nil {
 		return errors.Wrap(err, "Error failed to s3 upload")
 	}
