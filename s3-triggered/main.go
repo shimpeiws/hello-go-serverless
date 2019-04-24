@@ -67,7 +67,7 @@ func download(bucket string, key string) (f *os.File, err error) {
 	return tempFile, err
 }
 
-func minInClice(a []int32) int32 {
+func minInSlice(a []int32) int32 {
 	min := a[0]
 	for _, i := range a {
 		if i < min {
@@ -77,7 +77,7 @@ func minInClice(a []int32) int32 {
 	return min
 }
 
-func maxInClice(a []int32) int32 {
+func maxInSlice(a []int32) int32 {
 	max := a[0]
 	for _, i := range a {
 		if i > max {
@@ -127,10 +127,10 @@ func handler(ctx context.Context, req events.S3Event) error {
 		}
 	}
 
-	minX := minInClice(vercityX)
-	minY := minInClice(vercityY)
-	maxX := maxInClice(vercityX)
-	maxY := maxInClice(vercityY)
+	minX := minInSlice(vercityX)
+	minY := minInSlice(vercityY)
+	maxX := maxInSlice(vercityX)
+	maxY := maxInSlice(vercityY)
 
 	fileProcess, err := download(bucketName, key)
 	if err != nil {
