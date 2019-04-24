@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io/ioutil"
 	"log"
 	"os"
@@ -13,7 +17,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/pkg/errors"
-
 	"github.com/shimpeiws/hello-go-serverless/cloudvision"
 )
 
@@ -24,7 +27,8 @@ func createSession() *session.Session {
 	}))
 }
 
-func upload(file *os.File, key string) (*s3manager.UploadOutput, error) {
+func upload(file *bytes.Reader, key string) (*s3manager.UploadOutput, error) {
+
 	sess := createSession()
 
 	uploader := s3manager.NewUploader(sess)
@@ -45,7 +49,7 @@ func upload(file *os.File, key string) (*s3manager.UploadOutput, error) {
 func download(bucket string, key string) (f *os.File, err error) {
 	sess := createSession()
 
-	tempFile, _ := ioutil.TempFile("/tmp", "tempfile")
+	tempFile, _ := ioutil.TempFile("/tmp", "tempfile.jpeg")
 	defer os.Remove(tempFile.Name())
 
 	downloader := s3manager.NewDownloader(sess)
@@ -63,6 +67,26 @@ func download(bucket string, key string) (f *os.File, err error) {
 	return tempFile, err
 }
 
+func minInSlice(a []int32) int32 {
+	min := a[0]
+	for _, i := range a {
+		if i < min {
+			min = i
+		}
+	}
+	return min
+}
+
+func maxInSlice(a []int32) int32 {
+	max := a[0]
+	for _, i := range a {
+		if i > max {
+			max = i
+		}
+	}
+	return max
+}
+
 func handler(ctx context.Context, req events.S3Event) error {
 	log.Print("Handler Executed!!!")
 
@@ -78,6 +102,8 @@ func handler(ctx context.Context, req events.S3Event) error {
 	}
 	log.Print("downloaded")
 
+	vercityX := []int32{}
+	vercityY := []int32{}
 	faceAnnotations, err := cloudvision.DetectFaces(ctx, file)
 	if err != nil {
 		return errors.Wrap(err, "Failed to detect faces")
@@ -86,17 +112,84 @@ func handler(ctx context.Context, req events.S3Event) error {
 		log.Print("No face found")
 	} else {
 		log.Print("Faces: ")
+		log.Print(len(faceAnnotations))
 		for i, annotation := range faceAnnotations {
 			boundingPoly := annotation.BoundingPoly
 			log.Printf("Face %d", i)
 			for _, verticy := range boundingPoly.Vertices {
-				log.Printf("X: %d", verticy.X)
-				log.Printf("Y: %d", verticy.Y)
+				vercityX = append(vercityX, verticy.X)
+				vercityY = append(vercityY, verticy.Y)
+				log.Print("X: ")
+				log.Print(verticy.X)
+				log.Print("Y: ")
+				log.Print(verticy.Y)
 			}
 		}
 	}
 
-	_, err = upload(file, key)
+	minX := minInSlice(vercityX)
+	minY := minInSlice(vercityY)
+	maxX := maxInSlice(vercityX)
+	maxY := maxInSlice(vercityY)
+
+	fileProcess, err := download(bucketName, key)
+	if err != nil {
+		return errors.Wrap(err, "Error failed to s3 download")
+	}
+	log.Print("fileProcess downloaded")
+
+	img, err := jpeg.Decode(fileProcess)
+	if err != nil {
+		return errors.Wrap(err, "decode error")
+	}
+	bounds := img.Bounds()
+	dest := image.NewRGBA(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y = y + 1 {
+		for x := bounds.Min.X; x < bounds.Max.X; x = x + 1 {
+			dest.Set(x, y, img.At(x, y))
+		}
+	}
+
+	var block int32
+	block = 25
+	for y := minY + (block-1)/2; y < maxY; y = y + block {
+		for x := minX + (block-1)/2; x < maxX; x = x + block {
+			var cr, cg, cb float32
+			var alpha uint8
+			for j := y - (block-1)/2; j <= y+(block-1)/2; j++ {
+				for i := x - (block-1)/2; i <= x+(block-1)/2; i++ {
+					if i >= 0 && j >= 0 && i < maxX && j < maxY {
+						c := color.RGBAModel.Convert(img.At(int(i), int(j)))
+						col := c.(color.RGBA)
+						cr += float32(col.R)
+						cg += float32(col.G)
+						cb += float32(col.B)
+						alpha = col.A
+					}
+				}
+			}
+			cr = cr / float32(block*block)
+			cg = cg / float32(block*block)
+			cb = cb / float32(block*block)
+			for j := y - (block-1)/2; j <= y+(block-1)/2; j++ {
+				for i := x - (block-1)/2; i <= x+(block-1)/2; i++ {
+					if i >= 0 && j >= 0 && i < maxX && j < maxY {
+						dest.Set(int(i), int(j), color.RGBA{uint8(cr), uint8(cg), uint8(cb), alpha})
+					}
+				}
+			}
+		}
+	}
+	log.Print("mosaic")
+
+	buff := new(bytes.Buffer)
+	err = jpeg.Encode(buff, dest, nil)
+	if err != nil {
+		return errors.Wrap(err, "Failed to create buffer")
+	}
+	reader := bytes.NewReader(buff.Bytes())
+
+	_, err = upload(reader, key)
 	if err != nil {
 		return errors.Wrap(err, "Error failed to s3 upload")
 	}

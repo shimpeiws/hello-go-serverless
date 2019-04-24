@@ -17,10 +17,11 @@ Resources:
       CodeUri: s3-triggered/
       Handler: s3-triggered
       Runtime: go1.x
+      Timeout: 60
       Description: >-
         An Amazon S3 trigger that retrieves metadata for the object that has
         been updated.
-      MemorySize: 128
+      MemorySize: 512
       Policies:
         - Version: '2012-10-17'
           Statement:
