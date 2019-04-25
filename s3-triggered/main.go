@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/minodisk/go-fix-orientation/processor"
 	"github.com/pkg/errors"
 	"github.com/shimpeiws/hello-go-serverless/cloudvision"
 )
@@ -67,6 +68,18 @@ func download(bucket string, key string) (f *os.File, err error) {
 	return tempFile, err
 }
 
+func rotateImageFile(inputFile *os.File) (outputFile *bytes.Reader, err error) {
+	buff := new(bytes.Buffer)
+	img, err := processor.Process(inputFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "file rotate error")
+	}
+	jpeg.Encode(buff, img, nil)
+	reader := bytes.NewReader(buff.Bytes())
+
+	return reader, err
+}
+
 func minInSlice(a []int32) int32 {
 	min := a[0]
 	for _, i := range a {
@@ -104,7 +117,11 @@ func handler(ctx context.Context, req events.S3Event) error {
 
 	vercityX := []int32{}
 	vercityY := []int32{}
-	faceAnnotations, err := cloudvision.DetectFaces(ctx, file)
+	rotatedImage, err := rotateImageFile(file)
+	if err != nil {
+		return errors.Wrap(err, "Error rotate file")
+	}
+	faceAnnotations, err := cloudvision.DetectFaces(ctx, rotatedImage)
 	if err != nil {
 		return errors.Wrap(err, "Failed to detect faces")
 	}
@@ -133,12 +150,13 @@ func handler(ctx context.Context, req events.S3Event) error {
 	maxY := maxInSlice(vercityY)
 
 	fileProcess, err := download(bucketName, key)
+	fileProcessRotated, err := rotateImageFile(fileProcess)
 	if err != nil {
 		return errors.Wrap(err, "Error failed to s3 download")
 	}
 	log.Print("fileProcess downloaded")
 
-	img, err := jpeg.Decode(fileProcess)
+	img, err := jpeg.Decode(fileProcessRotated)
 	if err != nil {
 		return errors.Wrap(err, "decode error")
 	}
