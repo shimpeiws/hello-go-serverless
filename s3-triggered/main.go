@@ -47,7 +47,7 @@ func upload(file *bytes.Reader, key string) (*s3manager.UploadOutput, error) {
 	return result, err
 }
 
-func download(bucket string, key string) (f *os.File, err error) {
+func download(bucket string, key string) (f *bytes.Reader, err error) {
 	sess := createSession()
 
 	tempFile, _ := ioutil.TempFile("/tmp", "tempfile.jpeg")
@@ -65,7 +65,12 @@ func download(bucket string, key string) (f *os.File, err error) {
 		return nil, errors.Wrap(err, "file download error")
 	}
 
-	return tempFile, err
+	rotated, err := rotateImageFile(tempFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "file rotate error")
+	}
+
+	return rotated, err
 }
 
 func rotateImageFile(inputFile *os.File) (outputFile *bytes.Reader, err error) {
@@ -117,11 +122,10 @@ func handler(ctx context.Context, req events.S3Event) error {
 
 	vercityX := []int32{}
 	vercityY := []int32{}
-	rotatedImage, err := rotateImageFile(file)
 	if err != nil {
 		return errors.Wrap(err, "Error rotate file")
 	}
-	faceAnnotations, err := cloudvision.DetectFaces(ctx, rotatedImage)
+	faceAnnotations, err := cloudvision.DetectFaces(ctx, file)
 	if err != nil {
 		return errors.Wrap(err, "Failed to detect faces")
 	}
@@ -150,13 +154,12 @@ func handler(ctx context.Context, req events.S3Event) error {
 	maxY := maxInSlice(vercityY)
 
 	fileProcess, err := download(bucketName, key)
-	fileProcessRotated, err := rotateImageFile(fileProcess)
 	if err != nil {
 		return errors.Wrap(err, "Error failed to s3 download")
 	}
 	log.Print("fileProcess downloaded")
 
-	img, err := jpeg.Decode(fileProcessRotated)
+	img, err := jpeg.Decode(fileProcess)
 	if err != nil {
 		return errors.Wrap(err, "decode error")
 	}
