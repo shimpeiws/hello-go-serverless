@@ -18,7 +18,8 @@ func client(ctx context.Context) (*vision.ImageAnnotatorClient, error) {
 	return client, err
 }
 
-func DetectFaces(ctx context.Context, file *bytes.Reader) ([]*visionpb.FaceAnnotation, error) {
+func DetectFaces(file *bytes.Reader) ([]*visionpb.FaceAnnotation, error) {
+	ctx := context.Background()
 	image, err := vision.NewImageFromReader(file)
 	if err != nil {
 		log.Fatalf("Failed to read image: %v", err)
