@@ -1,9 +1,9 @@
 package cloudvision
 
 import (
+	"bytes"
 	"context"
 	"log"
-	"os"
 
 	vision "cloud.google.com/go/vision/apiv1"
 	visionpb "google.golang.org/genproto/googleapis/cloud/vision/v1"
@@ -18,7 +18,8 @@ func client(ctx context.Context) (*vision.ImageAnnotatorClient, error) {
 	return client, err
 }
 
-func DetectFaces(ctx context.Context, file *os.File) ([]*visionpb.FaceAnnotation, error) {
+func DetectFaces(file *bytes.Reader) ([]*visionpb.FaceAnnotation, error) {
+	ctx := context.Background()
 	image, err := vision.NewImageFromReader(file)
 	if err != nil {
 		log.Fatalf("Failed to read image: %v", err)
@@ -31,7 +32,7 @@ func DetectFaces(ctx context.Context, file *os.File) ([]*visionpb.FaceAnnotation
 
 	annotations, err := client.DetectFaces(ctx, image, nil, 10)
 	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+		log.Fatalf("Failed to annotations: %v", err)
 	}
 
 	return annotations, err

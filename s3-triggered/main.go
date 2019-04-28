@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/minodisk/go-fix-orientation/processor"
 	"github.com/pkg/errors"
 	"github.com/shimpeiws/hello-go-serverless/cloudvision"
 )
@@ -46,7 +47,7 @@ func upload(file *bytes.Reader, key string) (*s3manager.UploadOutput, error) {
 	return result, err
 }
 
-func download(bucket string, key string) (f *os.File, err error) {
+func download(bucket string, key string) (f *bytes.Reader, err error) {
 	sess := createSession()
 
 	tempFile, _ := ioutil.TempFile("/tmp", "tempfile.jpeg")
@@ -64,7 +65,24 @@ func download(bucket string, key string) (f *os.File, err error) {
 		return nil, errors.Wrap(err, "file download error")
 	}
 
-	return tempFile, err
+	rotated, err := rotateImageFile(tempFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "file rotate error")
+	}
+
+	return rotated, err
+}
+
+func rotateImageFile(inputFile *os.File) (outputFile *bytes.Reader, err error) {
+	buff := new(bytes.Buffer)
+	img, err := processor.Process(inputFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "file rotate error")
+	}
+	jpeg.Encode(buff, img, nil)
+	reader := bytes.NewReader(buff.Bytes())
+
+	return reader, err
 }
 
 func minInSlice(a []int32) int32 {
@@ -87,60 +105,10 @@ func maxInSlice(a []int32) int32 {
 	return max
 }
 
-func handler(ctx context.Context, req events.S3Event) error {
-	log.Print("Handler Executed!!!")
-
-	bucketName := req.Records[0].S3.Bucket.Name
-	key := req.Records[0].S3.Object.Key
-
-	log.Print("bucketName = " + bucketName)
-	log.Print("key = " + key)
-
-	file, err := download(bucketName, key)
+func mosaicProcessing(inputFile *bytes.Reader, minX int32, minY int32, maxX int32, maxY int32) (outputFile *bytes.Reader, err error) {
+	img, err := jpeg.Decode(inputFile)
 	if err != nil {
-		return errors.Wrap(err, "Error failed to s3 download")
-	}
-	log.Print("downloaded")
-
-	vercityX := []int32{}
-	vercityY := []int32{}
-	faceAnnotations, err := cloudvision.DetectFaces(ctx, file)
-	if err != nil {
-		return errors.Wrap(err, "Failed to detect faces")
-	}
-	if len(faceAnnotations) == 0 {
-		log.Print("No face found")
-	} else {
-		log.Print("Faces: ")
-		log.Print(len(faceAnnotations))
-		for i, annotation := range faceAnnotations {
-			boundingPoly := annotation.BoundingPoly
-			log.Printf("Face %d", i)
-			for _, verticy := range boundingPoly.Vertices {
-				vercityX = append(vercityX, verticy.X)
-				vercityY = append(vercityY, verticy.Y)
-				log.Print("X: ")
-				log.Print(verticy.X)
-				log.Print("Y: ")
-				log.Print(verticy.Y)
-			}
-		}
-	}
-
-	minX := minInSlice(vercityX)
-	minY := minInSlice(vercityY)
-	maxX := maxInSlice(vercityX)
-	maxY := maxInSlice(vercityY)
-
-	fileProcess, err := download(bucketName, key)
-	if err != nil {
-		return errors.Wrap(err, "Error failed to s3 download")
-	}
-	log.Print("fileProcess downloaded")
-
-	img, err := jpeg.Decode(fileProcess)
-	if err != nil {
-		return errors.Wrap(err, "decode error")
+		return nil, errors.Wrap(err, "file rotate error")
 	}
 	bounds := img.Bounds()
 	dest := image.NewRGBA(bounds)
@@ -185,11 +153,74 @@ func handler(ctx context.Context, req events.S3Event) error {
 	buff := new(bytes.Buffer)
 	err = jpeg.Encode(buff, dest, nil)
 	if err != nil {
-		return errors.Wrap(err, "Failed to create buffer")
+		return nil, errors.Wrap(err, "Failed to create buffer")
 	}
 	reader := bytes.NewReader(buff.Bytes())
 
-	_, err = upload(reader, key)
+	return reader, nil
+}
+
+func detectFace(file *bytes.Reader) (x []int32, y []int32, err error) {
+	vercityX := []int32{}
+	vercityY := []int32{}
+	faceAnnotations, err := cloudvision.DetectFaces(file)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Failed to detect faces")
+	}
+	if len(faceAnnotations) == 0 {
+		log.Print("No face found")
+	} else {
+		log.Print("Faces: ")
+		log.Print(len(faceAnnotations))
+		for i, annotation := range faceAnnotations {
+			boundingPoly := annotation.BoundingPoly
+			log.Printf("Face %d", i)
+			for _, verticy := range boundingPoly.Vertices {
+				vercityX = append(vercityX, verticy.X)
+				vercityY = append(vercityY, verticy.Y)
+				log.Print("X: ")
+				log.Print(verticy.X)
+				log.Print("Y: ")
+				log.Print(verticy.Y)
+			}
+		}
+	}
+	return vercityX, vercityY, err
+}
+
+func handler(ctx context.Context, req events.S3Event) error {
+	log.Print("Handler Executed!!!")
+
+	bucketName := req.Records[0].S3.Bucket.Name
+	key := req.Records[0].S3.Object.Key
+
+	log.Print("bucketName = " + bucketName)
+	log.Print("key = " + key)
+
+	file, err := download(bucketName, key)
+	if err != nil {
+		return errors.Wrap(err, "Error failed to s3 download")
+	}
+	log.Print("downloaded")
+
+	vercityX, vercityY, err := detectFace(file)
+
+	fileProcess, err := download(bucketName, key)
+	if err != nil {
+		return errors.Wrap(err, "Error failed to s3 download")
+	}
+	log.Print("fileProcess downloaded")
+
+	minX := minInSlice(vercityX)
+	minY := minInSlice(vercityY)
+	maxX := maxInSlice(vercityX)
+	maxY := maxInSlice(vercityY)
+	uploadFile, err := mosaicProcessing(fileProcess, minX, minY, maxX, maxY)
+	if err != nil {
+		return errors.Wrap(err, "mosaic processing failed")
+	}
+
+	_, err = upload(uploadFile, key)
 	if err != nil {
 		return errors.Wrap(err, "Error failed to s3 upload")
 	}
