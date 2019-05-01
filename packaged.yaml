@@ -9,15 +9,38 @@ Globals:
   Function:
     Timeout: 5
 Resources:
+  SQSTriggered:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://hello-go-serverless/e910db69f6938dabb9289355a08e7e6d
+      Handler: sqs-triggered
+      Runtime: go1.x
+      Timeout: 60
+      Description: SQS -> Upload to S3.
+      MemorySize: 512
+      Events:
+        MySQSEvent:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - MySqsQueue
+              - Arn
+            BatchSize: 10
+      Environment:
+        Variables:
+          TARGET_S3: hello-go-serverless-development
+          REGION: ap-northeast-1
   S3Triggered:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://hello-go-serverless/4868af691d6e014d1e9b55360926dbce
+      CodeUri: s3://hello-go-serverless/2c81df65326014691c3f8331a126831e
       Handler: s3-triggered
       Runtime: go1.x
+      Timeout: 60
       Description: An Amazon S3 trigger that retrieves metadata for the object that
         has been updated.
-      MemorySize: 128
+      MemorySize: 512
       Policies:
       - Version: '2012-10-17'
         Statement:
@@ -42,7 +65,7 @@ Resources:
   HelloWorldFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://hello-go-serverless/091f0e9cfd16e034570a258deb06ac50
+      CodeUri: s3://hello-go-serverless/f781deceb705b068fecd18d363f2f423
       Handler: hello-world
       Runtime: go1.x
       Tracing: Active
@@ -63,6 +86,11 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: hello-go-serverless-development
+  MySqsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 120
+      QueueName: hello-go-serverless-mysqs-queue
 Outputs:
   HelloWorldAPI:
     Description: API Gateway endpoint URL for Prod environment for First Function
