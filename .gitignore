@@ -1,2 +1,6 @@
 
 s3-triggered/service-account-key.json
+packaged.yaml
+sqs-triggered/sqs-triggered
+s3-triggered/s3-triggered
+hello-world/hello-world
