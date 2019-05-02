@@ -34,7 +34,12 @@ func handler(ctx context.Context, req events.SQSEvent) error {
 		}
 		key := sqsBody.UserID + ".jpg"
 		reader := bytes.NewReader(data)
-		s3.Upload(reader, os.Getenv("REGION"), key)
+		log.Print("key = " + key)
+		res, err := s3.Upload(reader, os.Getenv("TARGET_S3"), key)
+		if err != nil {
+			return errors.Wrap(err, "failed to upload image")
+		}
+		log.Print("res = " + res.UploadID)
 	}
 	return nil
 }

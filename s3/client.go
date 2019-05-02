@@ -7,7 +7,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/pkg/errors"
 )
 
 func createSession() *session.Session {
@@ -27,10 +26,6 @@ func Upload(file *bytes.Reader, bucketName string, key string) (*s3manager.Uploa
 		Key:    aws.String(key),
 		Body:   file,
 	})
-
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to upload file")
-	}
 
 	return result, err
 }
