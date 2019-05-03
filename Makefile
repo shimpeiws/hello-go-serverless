@@ -7,11 +7,13 @@ clean:
 	rm -rf ./hello-world/hello-world
 	rm -rf ./s3-triggered/s3-triggered
 	rm -rf ./sqs-triggered/sqs-triggered
+	rm -rf ./s3-to-sqs/s3-to-sqs
 
 build:
 	GOOS=linux GOARCH=amd64 go build -o hello-world/hello-world ./hello-world
 	GOOS=linux GOARCH=amd64 go build -o s3-triggered/s3-triggered ./s3-triggered
 	GOOS=linux GOARCH=amd64 go build -o sqs-triggered/sqs-triggered ./sqs-triggered
+	GOOS=linux GOARCH=amd64 go build -o s3-to-sqs/s3-to-sqs ./s3-to-sqs
 
 deploy:
 	sam package --profile go-serverless\
